@@ -1,0 +1,45 @@
+name: Main CI/CD Workflow
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  PROJECT_ID: ${{ secrets.PROJECT_ID }}
+  ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
+  TAG: ${{ vars.TAG }}
+  ARTIFACT_REGISTRY_ENDPOINT: ${{ vars.ARTIFACT_REGISTRY_ENDPOINT }}
+
+jobs:
+  main:
+    name: Build docker and push to Artifact Registry
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Google Cloud authentication.
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Set Cloud SDK in docker.
+        env:
+          ARTIFACT_REGISTRY_ENDPOINT: ${{ env.ARTIFACT_REGISTRY_ENDPOINT }}
+        run: |
+          gcloud auth configure-docker $ARTIFACT_REGISTRY_ENDPOINT
+
+      - name: Build docker image and push it.
+        env:
+          ARTIFACT_REGISTRY_REPO: ${{ env.ARTIFACT_REGISTRY_REPO }}
+          TAG: ${{ env.TAG }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          ARTIFACT_REGISTRY_ENDPOINT: ${{ env.ARTIFACT_REGISTRY_ENDPOINT }}
+        run: |
+          read -r REPO_NAME <<< $(git rev-parse --show-toplevel | xargs basename)
+          docker build -t $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG .
+          docker push $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG
