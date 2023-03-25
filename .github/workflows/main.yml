@@ -43,3 +43,4 @@ jobs:
           read -r REPO_NAME <<< $(git rev-parse --show-toplevel | xargs basename)
           docker build -t $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG .
           docker push $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG
+          
