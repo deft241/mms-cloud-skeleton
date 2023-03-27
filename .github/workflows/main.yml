@@ -8,6 +8,7 @@ env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
   ARTIFACT_REGISTRY_REPO: ${{ vars.ARTIFACT_REGISTRY_REPO }}
   TAG: ${{ vars.TAG }}
+  CLUSTER_NAME: my-cluster
   ARTIFACT_REGISTRY_ENDPOINT: ${{ vars.ARTIFACT_REGISTRY_ENDPOINT }}
 
 jobs:
@@ -31,7 +32,7 @@ jobs:
         env:
           ARTIFACT_REGISTRY_ENDPOINT: ${{ env.ARTIFACT_REGISTRY_ENDPOINT }}
         run: |
-          gcloud auth configure-docker $ARTIFACT_REGISTRY_ENDPOINT
+          gcloud auth configure-docker $ARTIFACT_REGISTRY_ENDPOINT --quiet
 
       - name: Build docker image and push it.
         env:
@@ -43,4 +44,36 @@ jobs:
           read -r REPO_NAME <<< $(git rev-parse --show-toplevel | xargs basename)
           docker build -t $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG .
           docker push $ARTIFACT_REGISTRY_ENDPOINT/$PROJECT_ID/$ARTIFACT_REGISTRY_REPO/$REPO_NAME:$TAG
-          
+
+      - name: Install Gcloud pluggins
+        run: gcloud components install gke-gcloud-auth-plugin --quiet
+      
+      - name: Install tf
+        uses: hashicorp/setup-terraform@v2
+      
+      - name: Run tf
+        env:
+          CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+        run: |
+          terraform init
+          terraform validate
+          terraform apply -auto-approve -input=false
+
+      - name: Install docker compose converter
+        run: |
+          curl -L https://github.com/kubernetes/kompose/releases/download/v1.24.0/kompose-linux-amd64 -o kompose
+          chmod +x kompose
+          sudo mv ./kompose /usr/local/bin/kompose
+
+      - name: Parse to kubernetes and login to kubernetes CLI tool
+        env:
+          CLUSTER_NAME: ${{ env.CLUSTER_NAME }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+        run: |
+          kompose convert -f ./compose.yaml -o ./manifest.yaml
+          gcloud container clusters get-credentials $CLUSTER_NAME --region europe-west1 --project $PROJECT_ID
+
+      - name: Kubernetes apply
+        run: |
+          kubectl apply -f ./manifest.yaml
